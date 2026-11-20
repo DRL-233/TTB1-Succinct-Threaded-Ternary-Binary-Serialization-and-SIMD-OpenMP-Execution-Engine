@@ -9,7 +9,7 @@ description = "Succinct Threaded Ternary Binary (TTB1) Serialization & SIMD/Open
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
-authors = [{name = "Your Name"}]
+authors = [{name = "Matthias Asare-Darko"}]
 keywords = [
     "succinct-data-structures",
     "ternary-tree",
