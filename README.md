@@ -20,9 +20,16 @@
 - **Load-Time Compilation:** `0.15 – 0.20 ms` for 10,000 nodes.
 - **Execution Throughput:** Up to **3.45 billion nodes/sec** (`11.7x` faster than unrolled C pointer trees; **753x–1,090x** faster than Python `json.loads` aggregation).
 
-## Quick Installation (Google Colab / Linux)
-```bash
-pip install git+[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git)
+## Quick Installation & Start (Python / Google Colab)
+Copy and run this single self-contained snippet in any Python environment or Google Colab cell:
+
+```python
+import subprocess, sys
+
+subprocess.check_call([
+    sys.executable, "-m", "pip", "install", "-q",
+    "git+[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git)"
+])
 
 import ttb1
 
@@ -32,4 +39,3 @@ blob, values = ttb1.from_json(data)
 with ttb1.TTB1Engine(blob, values) as engine:
     print("Total leaf sum:", engine.sum_leaves())
     print("Active-only sum (O(1) skip):", engine.query_skip(999))
-
