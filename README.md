@@ -1,5 +1,6 @@
 # TTB1: Succinct Threaded Ternary Binary Serialization & SIMD/OpenMP Execution Engine
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24379185.svg)](https://doi.org/10.5281/zenodo.24379185)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **TTB1** is a lightweight, zero-matrix-multiplication serialization format and bytecode execution runtime for hierarchical trees, Abstract Syntax Trees (ASTs), IoT telemetry, and low-latency media/network control planes.
@@ -21,11 +22,11 @@
 
 ## Quick Installation (Google Colab / Linux)
 ```bash
-pip install git+[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine).git
-```
+pip install git+[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git)
 
-## Quick Start
-```python
+
+## QUICK START
+
 import ttb1
 
 data = {"gateway": 1, "nodes": [{"status": 1, "val": 42}, {"status": 0, "val": 99}]}
@@ -34,4 +35,5 @@ blob, values = ttb1.from_json(data)
 with ttb1.TTB1Engine(blob, values) as engine:
     print("Total leaf sum:", engine.sum_leaves())
     print("Active-only sum (O(1) skip):", engine.query_skip(999))
-```
+
+
