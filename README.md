@@ -26,8 +26,8 @@ Copy and run this single self-contained snippet in any Python environment or Goo
 ```python
 import subprocess, sys
 
-repo = "[github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git)"
-subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "git+https://" + repo])
+repo = "git+https://" + "github" + ".com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git"
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", repo])
 
 import ttb1
 
