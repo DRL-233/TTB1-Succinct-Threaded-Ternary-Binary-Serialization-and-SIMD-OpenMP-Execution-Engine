@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ttb1"
+name = "ttb2"
 version = "0.2.0"
 description = "TTB2: Cycloidal Hub-Entangled Succinct Ternary Serialization & SIMD/OpenMP Execution Engine"
 readme = "README.md"
@@ -12,4 +12,4 @@ license = {text = "MIT"}
 authors = [{name = "Matthias Asare-Darko"}]
 
 [tool.setuptools]
-packages = ["ttb1"]
+packages = ["ttb2"]
