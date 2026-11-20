@@ -1,20 +1,23 @@
 cff-version: 1.2.0
-message: "If you use TTB1 in your research or software, please cite it using this metadata."
-title: "TTB1: Succinct Threaded Ternary Binary Serialization and SIMD/OpenMP Execution Engine"
-version: 0.1.0
+message: "If you use TTB1 (v0.2.0 / TTB2) in your research or software, please cite it using this metadata."
+title: "TTB1: Cycloidal Hub-Entangled Succinct Ternary Serialization and SIMD/OpenMP Execution Engine"
+version: 0.2.0
 doi: 10.5281/zenodo.24379185
-date-released: 2026-11-19
+date-released: 2026-11-20
 license: MIT
 repository-code: "https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine"
 abstract: >
-  TTB1 is a succinct binary wire format (2.60-3.89 bits/node) and load-time
-  basic-block fusion compiler for threaded ternary trees. By pairing 5-trit
-  degree packing with threaded jump links and SIMD/OpenMP execution, TTB1
-  achieves up to 30.8x wire compression and >1,000x faster tree aggregation
-  than standard JSON parsing without floating-point or matrix operations.
+  TTB1 (v0.2.0 / TTB2 wire protocol) is a succinct binary wire format (~2.60-2.84 bits/node)
+  and load-time basic-block fusion runtime for cycloidal hub-entangled ternary trees.
+  By combining 5-trit degree packing, predicate-sparse threaded cross-links,
+  hemispherical geodesic spoke addressing (2*pi*R^2) for O(1) center-to-periphery
+  flight and dynamic sibling jumps, and 64-byte aligned zero-copy payloads, TTB1
+  achieves up to 30.8x wire compression and >1,325x faster tree execution than
+  standard JSON pipelines without floating-point or matrix operations.
 keywords:
   - succinct data structures
   - ternary tree
+  - cycloidal hub-and-spoke addressing
   - bytecode compiler
   - basic block fusion
   - SIMD
@@ -24,4 +27,3 @@ keywords:
 authors:
   - family-names: "Asare-Darko"
     given-names: "Matthias"
-
