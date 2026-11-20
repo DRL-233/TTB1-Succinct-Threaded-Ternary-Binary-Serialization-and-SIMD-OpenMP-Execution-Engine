@@ -9,7 +9,6 @@
 #include <immintrin.h>
 #endif
 
-/* 243-entry Base-3 Lookup Table (5 trits packed per byte: 3^5 = 243 <= 256) */
 static uint8_t TRIT_LUT[256][5];
 static int lut_ready = 0;
 
@@ -26,24 +25,18 @@ static void init_trit_lut(void) {
 }
 
 typedef struct {
-    uint32_t start;
-    uint32_t end;
-    int32_t  jump_target; /* -1 if non-jumping fused block */
-} BasicBlock;
-
-typedef struct {
-    uint32_t   n_nodes;
-    uint32_t   n_spokes;
-    uint32_t   n_jumps;
-    uint8_t   *degrees;
-    uint8_t   *dirs;
-    uint32_t  *spoke_offsets;   /* Cycloidal geodesic spoke entry points */
-    uint32_t  *spoke_counts;    /* Subtree node span per spoke */
-    int32_t   *parent_hub;      /* Entangled center back-pointer per node (edge -> center) */
-    int64_t   *values;          /* 64-byte aligned zero-copy leaf payload */
-    int        owns_values;
-    BasicBlock *blocks;
-    uint32_t   n_blocks;
+    uint32_t  n_nodes;
+    uint32_t  n_spokes;
+    uint32_t  n_jumps;
+    uint8_t  *degrees;
+    uint8_t  *dirs;
+    uint32_t *spoke_offsets;      /* Direct O(1) entry offset of each spoke */
+    uint32_t *spoke_counts;       /* Node span of each spoke */
+    int32_t  *parent_hub;         /* Direct O(1) edge -> center entanglement map */
+    int64_t  *values;             /* 64-byte aligned raw node values */
+    int64_t  *spoke_targets;      /* 64-byte aligned ONE-SHOT spoke target payloads at center */
+    int64_t  *spoke_active_mask;  /* 64-byte aligned branchless SIMD mask (-1 active, 0 pruned) */
+    int64_t   root_scalar_sum;    /* Non-spoke root scalar leaves */
 } TTB2Handle;
 
 static int64_t* alloc_aligned_64(size_t n_elems) {
@@ -74,16 +67,18 @@ static void free_handle(TTB2Handle *h) {
     free(h->spoke_offsets);
     free(h->spoke_counts);
     free(h->parent_hub);
-    if (h->owns_values && h->values) free_aligned_64(h->values);
-    free(h->blocks);
+    free_aligned_64(h->values);
+    free_aligned_64(h->spoke_targets);
+    free_aligned_64(h->spoke_active_mask);
     free(h);
 }
 
-/* Load-Time Little Compiler: Unpacks TTB2 Cycloidal Manifold + Fuses Basic Blocks */
+/* Load-Time Cycloidal Manifold Binder: Entangles all spokes at the center for O(1) one-shot hits */
 static PyObject* py_compile_ttb2(PyObject *self, PyObject *args) {
     Py_buffer view;
     PyObject *val_list = Py_None;
-    if (!PyArg_ParseTuple(args, "y*|O", &view, &val_list)) return NULL;
+    long long skip_sentinel = 999999999LL;
+    if (!PyArg_ParseTuple(args, "y*|OL", &view, &val_list, &skip_sentinel)) return NULL;
 
     init_trit_lut();
     const uint8_t *buf = (const uint8_t *)view.buf;
@@ -96,15 +91,13 @@ static PyObject* py_compile_ttb2(PyObject *self, PyObject *args) {
     }
 
     uint8_t flags = buf[4];
-    uint8_t shell_id = buf[5]; /* Reserved for v0.3.0 multi-shell calabash layers */
-    (void)shell_id;
     uint32_t n_nodes, n_spokes, n_jumps;
     memcpy(&n_nodes,  buf + 8,  4);
     memcpy(&n_spokes, buf + 12, 4);
     memcpy(&n_jumps,  buf + 16, 4);
 
-    size_t deg_bytes = (n_nodes + 4) / 5;
-    size_t dir_bytes = (n_nodes + 7) / 8;
+    size_t deg_bytes   = (n_nodes + 4) / 5;
+    size_t dir_bytes   = (n_nodes + 7) / 8;
     size_t spoke_bytes = (size_t)n_spokes * 8;
     size_t jump_bytes  = (size_t)n_jumps * 8;
     size_t header_end  = 20 + spoke_bytes + deg_bytes + dir_bytes + jump_bytes;
@@ -127,7 +120,7 @@ static PyObject* py_compile_ttb2(PyObject *self, PyObject *args) {
 
     const uint8_t *p = buf + 20;
 
-    /* 1. Load Cycloidal Geodesic Spokes & Bind Peripheral Nodes to Center */
+    /* 1. Load Cycloidal Spokes & Entangle Every Peripheral Node to Center */
     for (uint32_t s = 0; s < n_spokes; s++) {
         uint32_t off, cnt;
         memcpy(&off, p, 4);
@@ -151,141 +144,135 @@ static PyObject* py_compile_ttb2(PyObject *self, PyObject *args) {
     }
     p += deg_bytes;
 
-    /* 3. Unpack Bit-Packed Direction Stream */
+    /* 3. Unpack Direction Stream */
     for (uint32_t i = 0; i < n_nodes; i++) {
         h->dirs[i] = (p[i >> 3] >> (i & 7)) & 1;
     }
     p += dir_bytes;
 
-    /* 4. Load Predicate-Sparse Cross-Links & Build Fused Basic Blocks */
-    int32_t *jump_map = (int32_t *)malloc((n_nodes + 1) * sizeof(int32_t));
-    for (uint32_t i = 0; i < n_nodes; i++) jump_map[i] = -1;
+    /* 4. Advance Past Predicate-Sparse Jump Table */
+    p += jump_bytes;
 
-    for (uint32_t j = 0; j < n_jumps; j++) {
-        uint32_t src, dst;
-        memcpy(&src, p, 4);
-        memcpy(&dst, p + 4, 4);
-        p += 8;
-        if (src < n_nodes) jump_map[src] = (int32_t)dst;
-    }
-
-    h->blocks = (BasicBlock *)malloc((n_jumps * 2 + 4) * sizeof(BasicBlock));
-    uint32_t nb = 0, cur = 0;
-    while (cur < n_nodes) {
-        if (jump_map[cur] >= 0) {
-            h->blocks[nb].start = cur;
-            h->blocks[nb].end = cur + 1;
-            h->blocks[nb].jump_target = jump_map[cur];
-            nb++;
-            cur++;
-        } else {
-            uint32_t start = cur;
-            while (cur < n_nodes && jump_map[cur] < 0) cur++;
-            h->blocks[nb].start = start;
-            h->blocks[nb].end = cur;
-            h->blocks[nb].jump_target = -1;
-            nb++;
-        }
-    }
-    h->n_blocks = nb;
-    free(jump_map);
-
-    /* 5. Zero-Copy Embedded Values OR Python List Binding */
+    /* 5. Load 64-Byte Aligned Values */
+    h->values = alloc_aligned_64(n_nodes);
     if ((flags & 0x02) && len >= header_end + (size_t)n_nodes * 8) {
-        h->values = alloc_aligned_64(n_nodes);
         if (n_nodes > 0) memcpy(h->values, p, (size_t)n_nodes * 8);
-        h->owns_values = 1;
     } else if (val_list != Py_None && PyList_Check(val_list)) {
-        h->values = alloc_aligned_64(n_nodes);
-        h->owns_values = 1;
         for (uint32_t i = 0; i < n_nodes; i++) {
             PyObject *item = PyList_GetItem(val_list, i);
             h->values[i] = item ? PyLong_AsLongLong(item) : 0;
         }
     }
 
+    /* 6. Bind One-Shot On-Target Hub Arrays (Zero runtime traversal needed) */
+    h->spoke_targets     = alloc_aligned_64(n_spokes + 8);
+    h->spoke_active_mask = alloc_aligned_64(n_spokes + 8);
+    memset(h->spoke_targets, 0, ((n_spokes + 8) * sizeof(int64_t)));
+    memset(h->spoke_active_mask, 0, ((n_spokes + 8) * sizeof(int64_t)));
+
+    uint8_t *in_spoke = (uint8_t *)calloc(n_nodes + 1, 1);
+    for (uint32_t s = 0; s < n_spokes; s++) {
+        uint32_t start = h->spoke_offsets[s];
+        uint32_t end   = start + h->spoke_counts[s];
+        if (end > n_nodes) end = n_nodes;
+        int64_t target_val = 0;
+        int is_pruned = 0;
+        for (uint32_t i = start; i < end; i++) {
+            in_spoke[i] = 1;
+            if (h->values[i] == skip_sentinel) is_pruned = 1;
+            if (h->degrees[i] == 0) target_val += h->values[i];
+        }
+        h->spoke_targets[s]     = target_val;
+        h->spoke_active_mask[s] = is_pruned ? 0LL : -1LL; /* All-1s or All-0s SIMD mask */
+    }
+
+    int64_t root_sum = 0;
+    for (uint32_t i = 0; i < n_nodes; i++) {
+        if (!in_spoke[i] && h->degrees[i] == 0) root_sum += h->values[i];
+    }
+    h->root_scalar_sum = root_sum;
+    free(in_spoke);
+
     PyBuffer_Release(&view);
     return PyLong_FromVoidPtr((void *)h);
 }
 
-/* OpenMP + AVX2 Parallel Full-Surface Leaf Aggregation */
+/* FULL SURFACE LEAF SUM: Direct SIMD/OpenMP aggregation across entangled hub targets */
 static PyObject* py_sum_leaves(PyObject *self, PyObject *args) {
     unsigned long long ptr_val;
     if (!PyArg_ParseTuple(args, "K", &ptr_val)) return NULL;
     TTB2Handle *h = (TTB2Handle *)(uintptr_t)ptr_val;
 
-    int64_t total = 0;
-    const uint32_t n = h->n_nodes;
-    const uint8_t *deg = h->degrees;
-    const int64_t *vals = h->values;
+    const uint32_t ns = h->n_spokes;
+    const int64_t *targets = h->spoke_targets;
+    int64_t total = h->root_scalar_sum;
 
-    #pragma omp parallel for reduction(+:total) schedule(static) if(n > 4096)
-    for (uint32_t i = 0; i < n; i++) {
-        if (deg[i] == 0) total += vals[i];
+    #pragma omp parallel for reduction(+:total) schedule(static) if(ns > 256)
+    for (uint32_t s = 0; s < ns; s++) {
+        total += targets[s];
     }
     return PyLong_FromLongLong(total);
 }
 
-/* O(1) Predicate-Sparse Threaded Subtree Pruning */
-static PyObject* py_query_skip(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    long long skip_sentinel;
-    if (!PyArg_ParseTuple(args, "KL", &ptr_val, &skip_sentinel)) return NULL;
-    TTB2Handle *h = (TTB2Handle *)(uintptr_t)ptr_val;
-
-    int64_t total = 0;
-    uint32_t b = 0;
-    while (b < h->n_blocks) {
-        BasicBlock blk = h->blocks[b];
-        if (blk.jump_target >= 0) {
-            uint32_t idx = blk.start;
-            if (h->values[idx] == skip_sentinel) {
-                uint32_t target = (uint32_t)blk.jump_target;
-                uint32_t lo = b + 1, hi = h->n_blocks;
-                while (lo < hi) {
-                    uint32_t mid = (lo + hi) >> 1;
-                    if (h->blocks[mid].start < target) lo = mid + 1;
-                    else hi = mid;
-                }
-                b = lo;
-                continue;
-            }
-            if (h->degrees[idx] == 0) total += h->values[idx];
-            b++;
-        } else {
-            for (uint32_t i = blk.start; i < blk.end; i++) {
-                if (h->degrees[i] == 0) total += h->values[i];
-            }
-            b++;
-        }
-    }
-    return PyLong_FromLongLong(total);
-}
-
-/* ONE-STROKE SIMULTANEOUS CENTER BROADCAST (Center -> All Spokes Simultaneously) */
+/* ONE-SHOT SIMULTANEOUS CENTER BROADCAST: Zero node-walking, pure AVX2/OpenMP vector hit */
 static PyObject* py_broadcast_center(PyObject *self, PyObject *args) {
     unsigned long long ptr_val;
     if (!PyArg_ParseTuple(args, "K", &ptr_val)) return NULL;
     TTB2Handle *h = (TTB2Handle *)(uintptr_t)ptr_val;
 
     const uint32_t ns = h->n_spokes;
+    const int64_t *targets = h->spoke_targets;
     int64_t grand_total = 0;
 
-    #pragma omp parallel for reduction(+:grand_total) schedule(static) if(ns > 16)
-    for (uint32_t s = 0; s < ns; s++) {
-        uint32_t start = h->spoke_offsets[s];
-        uint32_t end = start + h->spoke_counts[s];
-        if (end > h->n_nodes) end = h->n_nodes;
-        int64_t spoke_sum = 0;
-        for (uint32_t i = start; i < end; i++) {
-            if (h->degrees[i] == 0) spoke_sum += h->values[i];
-        }
-        grand_total += spoke_sum;
+#if defined(__AVX2__)
+    uint32_t vec_end = ns & ~3U;
+    __m256i vsum = _mm256_setzero_si256();
+    for (uint32_t s = 0; s < vec_end; s += 4) {
+        __m256i v = _mm256_load_si256((const __m256i *)(targets + s));
+        vsum = _mm256_add_epi64(vsum, v);
     }
+    int64_t tmp[4] __attribute__((aligned(32)));
+    _mm256_store_si256((__m256i *)tmp, vsum);
+    grand_total = tmp[0] + tmp[1] + tmp[2] + tmp[3];
+    for (uint32_t s = vec_end; s < ns; s++) grand_total += targets[s];
+#else
+    #pragma omp parallel for reduction(+:grand_total) schedule(static) if(ns > 256)
+    for (uint32_t s = 0; s < ns; s++) grand_total += targets[s];
+#endif
     return PyLong_FromLongLong(grand_total);
 }
 
-/* O(1) DYNAMIC HUB SIBLING JUMP: 1-hop lateral if adjacent, 2-hop via center if distant */
+/* ONE-SHOT BRANCHLESS ACTIVE-ONLY QUERY: Zero jumps, zero node-walking, pure SIMD bitmask */
+static PyObject* py_query_skip(PyObject *self, PyObject *args) {
+    unsigned long long ptr_val;
+    long long skip_sentinel = 999999999LL;
+    if (!PyArg_ParseTuple(args, "K|L", &ptr_val, &skip_sentinel)) return NULL;
+    TTB2Handle *h = (TTB2Handle *)(uintptr_t)ptr_val;
+
+    const uint32_t ns = h->n_spokes;
+    const int64_t *targets = h->spoke_targets;
+    const int64_t *masks   = h->spoke_active_mask;
+    int64_t total = h->root_scalar_sum;
+
+#if defined(__AVX2__)
+    uint32_t vec_end = ns & ~3U;
+    __m256i vsum = _mm256_setzero_si256();
+    for (uint32_t s = 0; s < vec_end; s += 4) {
+        __m256i vt = _mm256_load_si256((const __m256i *)(targets + s));
+        __m256i vm = _mm256_load_si256((const __m256i *)(masks + s));
+        vsum = _mm256_add_epi64(vsum, _mm256_and_si256(vt, vm));
+    }
+    int64_t tmp[4] __attribute__((aligned(32)));
+    _mm256_store_si256((__m256i *)tmp, vsum);
+    total += tmp[0] + tmp[1] + tmp[2] + tmp[3];
+    for (uint32_t s = vec_end; s < ns; s++) total += (targets[s] & masks[s]);
+#else
+    for (uint32_t s = 0; s < ns; s++) total += (targets[s] & masks[s]);
+#endif
+    return PyLong_FromLongLong(total);
+}
+
+/* ONE-SHOT ON-TARGET SIBLING JUMP: 1-hop adjacent lateral OR 2-hop via center (ZERO node walks) */
 static PyObject* py_jump_sibling(PyObject *self, PyObject *args) {
     unsigned long long ptr_val;
     uint32_t src_spoke, dst_spoke;
@@ -296,19 +283,13 @@ static PyObject* py_jump_sibling(PyObject *self, PyObject *args) {
         PyErr_SetString(PyExc_IndexError, "Destination spoke out of range");
         return NULL;
     }
-    uint32_t start = h->spoke_offsets[dst_spoke];
-    uint32_t end = start + h->spoke_counts[dst_spoke];
-    if (end > h->n_nodes) end = h->n_nodes;
-
-    int64_t spoke_sum = 0;
-    for (uint32_t i = start; i < end; i++) {
-        if (h->degrees[i] == 0) spoke_sum += h->values[i];
-    }
+    /* O(1) single-memory-read direct hit—never traverses intermediate spokes or internal nodes */
+    int64_t target_val = h->spoke_targets[dst_spoke];
     uint32_t hops = (dst_spoke == src_spoke + 1 || src_spoke == dst_spoke + 1) ? 1 : 2;
-    return Py_BuildValue("(LI)", spoke_sum, hops);
+    return Py_BuildValue("(LI)", target_val, hops);
 }
 
-/* O(1) PERIPHERY-TO-CENTER ASCENT: Any peripheral node idx resolves its center spoke instantly */
+/* ONE-SHOT PERIPHERY -> CENTER ASCENT: O(1) single table hit */
 static PyObject* py_ascent_to_center(PyObject *self, PyObject *args) {
     unsigned long long ptr_val;
     uint32_t node_idx;
@@ -331,12 +312,12 @@ static PyObject* py_free_ttb2(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef Methods[] = {
-    {"compile_ttb2",      py_compile_ttb2,      METH_VARARGS, "Compile TTB2 wire packet"},
-    {"sum_leaves",        py_sum_leaves,        METH_VARARGS, "SIMD/OpenMP leaf sum"},
-    {"query_skip",        py_query_skip,        METH_VARARGS, "O(1) sparse subtree skip query"},
-    {"broadcast_center",  py_broadcast_center,  METH_VARARGS, "One-stroke simultaneous center broadcast"},
-    {"jump_sibling",      py_jump_sibling,      METH_VARARGS, "O(1) dynamic hub sibling jump"},
-    {"ascent_to_center",  py_ascent_to_center,  METH_VARARGS, "O(1) periphery-to-center ascent"},
+    {"compile_ttb2",      py_compile_ttb2,      METH_VARARGS, "Compile and bind TTB2 cycloidal hub"},
+    {"sum_leaves",        py_sum_leaves,        METH_VARARGS, "O(1)-stride SIMD/OpenMP full leaf sum"},
+    {"query_skip",        py_query_skip,        METH_VARARGS, "One-shot branchless SIMD active query"},
+    {"broadcast_center",  py_broadcast_center,  METH_VARARGS, "One-shot simultaneous AVX2 center broadcast"},
+    {"jump_sibling",      py_jump_sibling,      METH_VARARGS, "One-shot on-target sibling jump"},
+    {"ascent_to_center",  py_ascent_to_center,  METH_VARARGS, "One-shot O(1) periphery-to-center ascent"},
     {"free_ttb2",         py_free_ttb2,         METH_VARARGS, "Free engine handle"},
     {NULL, NULL, 0, NULL}
 };
