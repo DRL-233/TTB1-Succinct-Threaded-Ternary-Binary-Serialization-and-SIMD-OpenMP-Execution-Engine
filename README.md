@@ -24,9 +24,6 @@
 ```bash
 pip install git+[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git)
 
-
-## QUICK START
-
 import ttb1
 
 data = {"gateway": 1, "nodes": [{"status": 1, "val": 42}, {"status": 0, "val": 99}]}
