@@ -2,6 +2,7 @@ cff-version: 1.2.0
 message: "If you use TTB1 in your research or software, please cite it using this metadata."
 title: "TTB1: Succinct Threaded Ternary Binary Serialization and SIMD/OpenMP Execution Engine"
 version: 0.1.0
+doi:10.5281/zenodo.24379185
 date-released: 2026-11-19
 license: MIT
 repository-code: "[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine)"
