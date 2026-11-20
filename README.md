@@ -1,9 +1,9 @@
-# TTB1 (`v0.2.0` / `TTB2`): Cycloidal Hub-Entangled Succinct Ternary Serialization & SIMD/OpenMP Execution Engine
+# TTB2 (`v0.2.0`): Cycloidal Hub-Entangled Succinct Ternary Serialization & SIMD/OpenMP Execution Engine
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24379185.svg)](https://doi.org/10.5281/zenodo.24379185)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**TTB1 (`v0.2.0`)** is a lightweight, zero-matrix-multiplication serialization format (`TTB2` wire protocol) and bytecode execution runtime for hierarchical trees, Abstract Syntax Trees (ASTs), IoT telemetry, and low-latency media/network control planes.
+**TTB2 (`v0.2.0`)** is a lightweight, zero-matrix-multiplication serialization format (`TTB2` wire protocol) and bytecode execution runtime for hierarchical trees, Abstract Syntax Trees (ASTs), IoT telemetry, and low-latency media/network control planes. *(Evolved from the `v0.1.0` `TTB1` baseline architecture.)*
 
 ## Key Innovations (`v0.2.0` / `TTB2` Architecture)
 1. **Hemispherical Cycloidal Hub-Entangled Manifold ($A = 2\pi R^2$):**
@@ -31,7 +31,7 @@ import subprocess, sys
 repo = "git+https://" + "github" + ".com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine.git"
 subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", repo])
 
-import ttb1
+import ttb2
 
 data = {
     "gateway": 1,
@@ -43,9 +43,9 @@ data = {
 }
 
 # Encodes into a self-contained zero-copy TTB2 packet (values=None)
-blob, values = ttb1.from_json(data)
+blob, values = ttb2.from_json(data)
 
-with ttb1.TTB1Engine(blob, values) as engine:
+with ttb2.TTB2Engine(blob, values) as engine:
     print("Total leaf sum (SIMD/OpenMP):", engine.sum_leaves())
     print("Active-only sum (O(1) sparse skip):", engine.query_skip())
     print("One-stroke center broadcast:", engine.broadcast_center())
