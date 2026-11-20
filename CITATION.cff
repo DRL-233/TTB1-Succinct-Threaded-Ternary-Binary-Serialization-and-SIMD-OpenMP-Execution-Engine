@@ -5,7 +5,7 @@ version: 0.1.0
 doi: 10.5281/zenodo.24379185
 date-released: 2026-11-19
 license: MIT
-repository-code: "[https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine](https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine)"
+repository-code: "https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine"
 abstract: >
   TTB1 is a succinct binary wire format (2.60-3.89 bits/node) and load-time
   basic-block fusion compiler for threaded ternary trees. By pairing 5-trit
@@ -24,3 +24,4 @@ keywords:
 authors:
   - family-names: "Asare-Darko"
     given-names: "Matthias"
+
