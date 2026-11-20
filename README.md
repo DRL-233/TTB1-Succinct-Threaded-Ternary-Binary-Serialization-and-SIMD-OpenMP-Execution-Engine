@@ -46,6 +46,8 @@
 | **Search Engines & Live Indexes** | Pointer-jumping & branch stalls on dynamic out-of-stock/deleted posting filters | **13.58 B nodes/sec** branchless SIMD bitmask filtering (`_mm256_and_si256`) |
 | **High-Throughput PHP (`FFI` + `opcache`)** | Nested `HashTable`/`zval` explosion (`~376 B/row`) and per-request GC teardown | Zero-`zval` shared-memory C hub execution in **<1 µs** via native PHP `FFI` |
 
+---
+
 ## AI / ML Acceleration & Quantum Roadmap (`v0.2.0` $\rightarrow$ `v3+`)
 
 While dense GPUs saturate compute on uniform `GEMM` matrix multiplications, modern AI systems are increasingly bottlenecked by **dynamic sparsity, agentic tree search, prefix cache management, and ternary quantization**. `TTB2 v0.2.0` eliminates pointer-chasing and branch divergence across these irregular AI control planes in sub-microsecond latency:
@@ -59,8 +61,9 @@ While dense GPUs saturate compute on uniform `GEMM` matrix multiplications, mode
 
 ### Roadmap to `v3+`: Quantum Mechanics & Qutrit State Manifolds
 `TTB2 v0.2.0` establishes the classical geometric foundation for **`v3+`**:
-- **Ternary $\rightarrow$ Qutrit State Space:** Extending the 5-trit classical stream (`{0, 1, 2}`) to represent **qutrit** ($|0\rangle, |1\rangle, |2\rangle$) basis states and tensor-network bond topologies.
+- **Ternary $\rightarrow$ Qutrit State Space:** Extending the 5-trit classical stream (`{0, 1, 2}`) to represent **qutrit** ($\vert{}0\rangle, \vert{}1\rangle, \vert{}2\rangle$) basis states and tensor-network bond topologies.
 - **Hub Entanglement $\rightarrow$ Quantum Superposition & Non-Local Walks:** Evolving `v0.2.0`'s deterministic periphery-to-hub entanglement (`broadcast_center` & $O(1)$ `jump_sibling`) into complex-amplitude state vectors and quantum-walk interference kernels for hybrid CPU/QPU execution.
+
 ---
 
 ## Quick Start: Python / Google Colab
