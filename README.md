@@ -33,4 +33,3 @@ with ttb1.TTB1Engine(blob, values) as engine:
     print("Total leaf sum:", engine.sum_leaves())
     print("Active-only sum (O(1) skip):", engine.query_skip(999))
 
-
