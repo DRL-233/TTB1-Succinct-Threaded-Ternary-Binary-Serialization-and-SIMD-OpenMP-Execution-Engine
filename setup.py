@@ -1,23 +1,16 @@
 import sys
 from setuptools import setup, Extension
 
-if sys.platform == "win32":
-    compile_args = ["/O2", "/openmp"]
-    link_args = []
-else:
-    compile_args = ["-O3", "-march=native", "-fopenmp", "-fPIC"]
-    link_args = ["-fopenmp"]
+extra_compile_args = ["/O2", "/arch:AVX2", "/openmp"] if sys.platform == "win32" else [
+    "-O3", "-march=native", "-fopenmp", "-Wall"
+]
+extra_link_args = [] if sys.platform == "win32" else ["-fopenmp"]
 
-c_ext = Extension(
-    name="ttb1._ttb1_core",
+ext = Extension(
+    "ttb1._ttb1_core",
     sources=["ttb1/_ttb1_core.c"],
-    extra_compile_args=compile_args,
-    extra_link_args=link_args,
+    extra_compile_args=extra_compile_args,
+    extra_link_args=extra_link_args,
 )
 
-setup(
-    name="ttb1",
-    version="0.1.0",
-    packages=["ttb1"],
-    ext_modules=[c_ext],
-)
+setup(name="ttb1", version="0.2.0", packages=["ttb1"], ext_modules=[ext])
