@@ -15,7 +15,7 @@
    - **Dynamic Center Sibling Jumps (`jump_sibling`):** Pivots between adjacent siblings in **1 lateral hop** (`|dst - src| == 1`) and across distant siblings (`|dst - src| > 1`) in **2 hops via the dynamic center** in $O(1)$ without scanning intermediate nodes.
 2. **Predicate-Sparse Succinct Wire Format & Branchless SIMD Masking:**
    - **5-Trit Packed Degree Stream:** Packs five base-3 node out-degrees (`0`, `1`, `2`) per byte ($3^5 = 243 \le 256$) at **1.60 bits/node**.
-   - **Branchless AVX2 Active-Only Filtering (`query_skip`):** Replaces conditional branch jumps with a zero-divergence 256-bit SIMD bitmask (`_mm256_and_si256`), pruning inactive subtrees (`status == 0`) at **13.58 billion nodes/sec**.
+   - **Branchless AVX2 Active-Only Filtering (`query_skip`):** Replaces conditional branch jumps with a zero-divergence 256-bit SIMD bitmask (`_mm256_and_si256`), pruning inactive subtrees (`status == 0`) at **13.58–27.0 billion nodes/sec**.
 3. **Cross-Language Pure-C ABI (`libttb2.so` / `ttb2.h`) & Zero-Copy Python C-Extension:**
    - Embeds `int64` leaf payloads on 64-byte cache-line boundaries for direct execution from **Python**, **PHP (`FFI` / `opcache.preload`)**, **C/C++**, **Rust**, and **Go** without heap object allocation or GC overhead.
 
@@ -27,9 +27,10 @@
 | :--- | :--- | :--- | :--- |
 | **Wire Topology Density** | `68,391 bytes` (Minified JSON) | **`14,016 bytes`** (`11.21 bits/node`) | **4.9x smaller** |
 | **Load-Time Deserialization / Hub Binding** | `2,340.19 µs` (`json.loads`) | **`60.58 µs`** | **38.6x faster** |
-| **Full Surface Aggregation (`sum_leaves`)** | `1,556.07 µs` (JSON Parse + Sum) | **`1.60 µs`** (`6.25 B nodes/sec`) | **973x faster** |
-| **Branchless Active-Only Query (`query_skip`)** | `1,509.53 µs` (JSON Filter + Sum) | **`0.74 µs`** (`13.58 B nodes/sec`) | **2,049x faster** |
-| **One-Stroke Center Broadcast (`broadcast_center`)** | Sequential spoke traversal | **`0.47 µs`** (1,000 spokes in 1 AVX2 stroke) | **$O(1)$ SIMD stroke** |
+| **Python Full Surface Aggregation (`sum_leaves`)** | `1,556.07 µs` (JSON Parse + Sum) | **`1.60 µs`** (`6.25 B nodes/sec`) | **973x faster** |
+| **Python Branchless Active Query (`query_skip`)** | `1,509.53 µs` (JSON Filter + Sum) | **`0.74 µs`** (`13.58 B nodes/sec`) | **2,049x faster** |
+| **PHP 8.x FFI Branchless Active Query (`query_skip`)** | `1,045.63 µs` (`json_decode` + `foreach`) | **`0.37 µs`** (`27.0 B nodes/sec`) | **2,849x faster** |
+| **PHP 8.x FFI One-Stroke Center Broadcast** | Sequential `HashTable` traversal | **`0.34 µs`** (1,000 spokes in 1 AVX2 stroke) | **$O(1)$ SIMD stroke** |
 | **Dynamic Hub Sibling Jump (`Spoke 0 -> 999`)** | $O(N)$ intermediate scan | **`0.42 µs`** (2 hops via dynamic center) | **$O(1)$ constant time** |
 | **Sparse MoE Neural Router (1,024 Experts, 90% Sparse)** | `96.14 µs` (Conditional Router) | **`0.66 µs`** (Branchless AVX2 Mask) | **147x faster** |
 
@@ -40,11 +41,11 @@
 | Domain | Status Quo Bottleneck | `TTB2 v0.2.0` Enhancement |
 | :--- | :--- | :--- |
 | **Compiler Frontends & AST Passes** | Pointer-chasing heap ASTs (`Visitor` pattern), cache misses, $O(N)$ dead-code walks | Flat 64B-aligned spokes; **0.74 µs** branchless dead-code masking; **$O(1)$** leaf-to-module ascent |
-| **Live Streaming SFUs (WebRTC / LL-HLS)** | Nested maps & JSON/Protobuf control planes per frame tick | **0.47 µs** 1,000-track telemetry broadcast; **0.42 µs** $O(1)$ simulcast/peer handoffs |
+| **Live Streaming SFUs (WebRTC / LL-HLS)** | Nested maps & JSON/Protobuf control planes per frame tick | **0.34–0.47 µs** 1,000-track telemetry broadcast; **0.42 µs** $O(1)$ simulcast/peer handoffs |
 | **Sparse Neural Networks (MoE & BitNet)** | Branch divergence on gated experts; bloated 8/16-bit storage for ternary weights | **0.66 µs** branchless 1,024-expert routing; native **1.60 bits/node** 5-trit topology |
 | **Live Maps, GPS & Traffic Control** | Contraction Hierarchy shortcut rebuilds on live road closures; slow SCADA polling | **0.74 µs** zero-rebuild closure masking; **0.42 µs** $O(1)$ detour pivots & emergency preemption |
-| **Search Engines & Live Indexes** | Pointer-jumping & branch stalls on dynamic out-of-stock/deleted posting filters | **13.58 B nodes/sec** branchless SIMD bitmask filtering (`_mm256_and_si256`) |
-| **High-Throughput PHP (`FFI` + `opcache`)** | Nested `HashTable`/`zval` explosion (`~376 B/row`) and per-request GC teardown | Zero-`zval` shared-memory C hub execution in **<1 µs** via native PHP `FFI` |
+| **Search Engines & Live Indexes** | Pointer-jumping & branch stalls on dynamic out-of-stock/deleted posting filters | **13.58–27.0 B nodes/sec** branchless SIMD bitmask filtering (`_mm256_and_si256`) |
+| **High-Throughput PHP (`FFI` + `opcache`)** | Nested `HashTable`/`zval` explosion (`~376 B/row`) and per-request GC teardown | **0.37 µs** zero-`zval` shared-memory C hub execution (**2,849x faster** than `json_decode`) |
 
 ---
 
