@@ -1,162 +1,151 @@
+"""
+TTB v0.3.0 (TTB3-Bridge): Cycloidal Hub-Entangled Succinct Ternary Execution Engine
+& Lean-4-Verified OZIP Z3-Triality Contraction Runtime.
+"""
 import struct
-from typing import Any, List, Tuple, Optional
-from . import _ttb2_core
+import _ttb2_core
 
-SKIP_SENTINEL = 999999999
+__version__ = "0.3.0"
 
-def from_json(
-    obj: Any,
-    skip_key: str = "status",
-    skip_val: Any = 0,
-    embed_values: bool = True,
-    shell_id: int = 0,
-) -> Tuple[bytes, Optional[List[int]]]:
+
+def from_json(workload, embed_values=True, embed_width="auto"):
     """
-    Encodes a hierarchical Python/JSON tree into a TTB2 Cycloidal-Hub Succinct Packet.
-    - Emits predicate-sparse cross-links ONLY on prunable nodes (~2.84 bits/node).
-    - Records O(1) cycloidal geodesic spokes for top-level branches.
-    - Embeds int64 leaf values directly into the wire packet for zero-copy execution.
+    Encodes a hierarchical Python dict/list tree into a TTB2/TTB3 wire packet.
+    - embed_width="auto" (v0.3.0 default): packs leaf scalars at minimal int8/16/32/64 width
+      with container elision (flags=0x04), inflated on load via AVX2 SIMD sign-extension.
+    - embed_width=64: legacy v0.2.0 raw 64-bit layout (flags=0x02).
     """
-    degrees: List[int] = []
-    dirs: List[int] = []
-    values: List[int] = []
-    jumps: List[Tuple[int, int]] = []
-    spokes: List[Tuple[int, int]] = []
+    degs, dirs, leaves, all_vals, spokes = [], [], [], [], []
 
-    def emit_node(deg: int, d_bit: int, val: int) -> int:
-        idx = len(degrees)
-        degrees.append(deg)
-        dirs.append(d_bit)
-        values.append(val)
-        return idx
-
-    def walk(node: Any, is_spoke_root: bool = False) -> None:
-        spoke_start = len(degrees)
-
-        if isinstance(node, dict):
-            is_prunable = (skip_key in node and node[skip_key] == skip_val)
-            items = list(node.items())
+    def walk(obj):
+        if isinstance(obj, dict):
+            items = list(obj.values())
             if not items:
-                emit_node(0, 0, 0)
-            else:
-                for i, (k, v) in enumerate(items):
-                    has_next = 1 if (i + 1 < len(items)) else 0
-                    deg = 2 if has_next else 1
-                    cur_idx = emit_node(deg, 1, SKIP_SENTINEL if (i == 0 and is_prunable) else 0)
-                    if i == 0 and is_prunable:
-                        jump_slot = len(jumps)
-                        jumps.append((cur_idx, 0))
-                    walk(v, is_spoke_root=False)
-                if is_prunable:
-                    jumps[jump_slot] = (jumps[jump_slot][0], len(degrees))
-
-        elif isinstance(node, list):
-            if not node:
-                emit_node(0, 0, 0)
-            else:
-                for i, item in enumerate(node):
-                    has_next = 1 if (i + 1 < len(node)) else 0
-                    emit_node(2 if has_next else 1, 0, 0)
-                    walk(item, is_spoke_root=is_spoke_root)
-
-        elif isinstance(node, bool):
-            emit_node(0, 0, int(node))
-        elif isinstance(node, int):
-            emit_node(0, 0, int(node))
-        else:
-            emit_node(0, 0, 1)
-
-        if is_spoke_root:
-            spokes.append((spoke_start, len(degrees) - spoke_start))
-
-    if isinstance(obj, dict):
-        list_keys = [k for k, v in obj.items() if isinstance(v, list) and len(v) > 0]
-        if list_keys:
-            primary_key = max(list_keys, key=lambda k: len(obj[k]))
-            for k, v in obj.items():
-                if k == primary_key:
-                    for item in v:
-                        walk(item, is_spoke_root=True)
+                degs.append(0)
+                dirs.append(0)
+                leaves.append(0)
+                all_vals.append(0)
+                return
+            for k_i, v in enumerate(items):
+                if k_i < len(items) - 1:
+                    degs.append(2)
+                    dirs.append(0)
+                    all_vals.append(0)
+                    walk(v)
                 else:
-                    walk(v, is_spoke_root=False)
+                    walk(v)
+        elif isinstance(obj, list):
+            for e_i, elem in enumerate(obj):
+                if e_i < len(obj) - 1:
+                    degs.append(2)
+                    dirs.append(0)
+                    all_vals.append(0)
+                s_start = len(degs)
+                walk(elem)
+                spokes.append((s_start, len(degs) - s_start))
         else:
-            for v in obj.values():
-                walk(v, is_spoke_root=True)
-    elif isinstance(obj, list):
-        for item in obj:
-            walk(item, is_spoke_root=True)
-    else:
-        walk(obj, is_spoke_root=True)
+            val = int(obj)
+            degs.append(0)
+            dirs.append(0)
+            leaves.append(val)
+            all_vals.append(val)
 
-    n_nodes = len(degrees)
+    walk(workload)
+    n_nodes = len(degs)
     n_spokes = len(spokes)
-    n_jumps = len(jumps)
 
-    deg_packed = bytearray((n_nodes + 4) // 5)
+    deg_bytes = bytearray((n_nodes + 4) // 5)
     for i in range(0, n_nodes, 5):
         acc = 0
-        mult = 1
         for k in range(5):
             if i + k < n_nodes:
-                acc += degrees[i + k] * mult
-            mult *= 3
-        deg_packed[i // 5] = acc
+                acc += degs[i + k] * (3 ** k)
+        deg_bytes[i // 5] = acc
 
-    dir_packed = bytearray((n_nodes + 7) // 8)
+    dir_bytes = bytearray((n_nodes + 7) // 8)
     for i, d in enumerate(dirs):
         if d:
-            dir_packed[i >> 3] |= (1 << (i & 7))
+            dir_bytes[i >> 3] |= 1 << (i & 7)
 
-    flags = 0x01 | (0x02 if embed_values else 0x00)
-    header = struct.pack("<4sBBHIII", b"TTB2", flags, shell_id & 0xFF, 0, n_nodes, n_spokes, n_jumps)
+    spoke_bytes = b"".join(struct.pack("<II", off, cnt) for off, cnt in spokes)
 
-    spoke_buf = bytearray()
-    for off, cnt in spokes:
-        spoke_buf.extend(struct.pack("<II", off, cnt))
+    if not embed_values:
+        header = b"TTB2" + bytes([0x00, 0, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+        return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes), all_vals
 
-    jump_buf = bytearray()
-    for src, dst in jumps:
-        jump_buf.extend(struct.pack("<II", src, dst))
+    if embed_width == 64:
+        header = b"TTB2" + bytes([0x02, 8, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+        val_bytes = b"".join(struct.pack("<q", v) for v in all_vals)
+        return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes) + val_bytes, all_vals
 
-    packet = bytearray(header) + spoke_buf + deg_packed + dir_packed + jump_buf
-    if embed_values:
-        val_buf = struct.pack(f"<{n_nodes}q", *values)
-        packet.extend(val_buf)
-        return bytes(packet), None
+    max_abs = max((abs(v) for v in leaves), default=0)
+    if max_abs <= 127:
+        w_code, fmt = 1, "<b"
+    elif max_abs <= 32767:
+        w_code, fmt = 2, "<h"
+    elif max_abs <= 2147483647:
+        w_code, fmt = 4, "<i"
+    else:
+        w_code, fmt = 8, "<q"
 
-    return bytes(packet), values
+    header = b"TTB2" + bytes([0x04, w_code, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+    val_bytes = b"".join(struct.pack(fmt, v) for v in leaves)
+    return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes) + val_bytes, all_vals
+
+
+def ozip_psi1(s: int, g: int, i: int) -> int:
+    """OZIP v2.0.0 mixed-radix coordinate bijection: psi1(s, g, i) = 9s + 3g + i in Fin 18."""
+    return _ttb2_core.ozip_psi1(s, g, i)
+
+
+def ozip_contract_3x3x2(A_flat, B_flat):
+    """Contracts <3, 3, 2> Z3-triality sectors in a single native C/AVX2 pass."""
+    a_bytes = struct.pack("<9q", *[int(x) for x in A_flat])
+    b_bytes = struct.pack("<6q", *[int(x) for x in B_flat])
+    c_bytes = _ttb2_core.ozip_contract_3x3x2(a_bytes, b_bytes)
+    return list(struct.unpack("<6q", c_bytes))
 
 
 class TTB2Engine:
-    """Zero-copy C/OpenMP/SIMD execution engine for TTB2 Cycloidal-Hub packets."""
-    def __init__(self, blob: bytes, values: Optional[List[int]] = None):
-        self._ptr = _ttb2_core.compile_ttb2(blob, values)
+    """Context-managed handle to the compiled C/AVX2/OpenMP cycloidal manifold."""
+
+    def __init__(self, packet: bytes, values=None, skip_sentinel: int = 999999999):
+        self._skip = skip_sentinel
+        if values is not None:
+            self._handle = _ttb2_core.compile_ttb2(packet, values, skip_sentinel)
+        else:
+            self._handle = _ttb2_core.compile_ttb2(packet, None, skip_sentinel)
 
     def sum_leaves(self) -> int:
-        return _ttb2_core.sum_leaves(self._ptr)
+        return _ttb2_core.sum_leaves(self._handle)
 
-    def query_skip(self, sentinel: int = SKIP_SENTINEL) -> int:
-        return _ttb2_core.query_skip(self._ptr, sentinel)
+    def query_skip(self, skip_sentinel=None) -> int:
+        s = self._skip if skip_sentinel is None else skip_sentinel
+        return _ttb2_core.query_skip(self._handle, s)
 
     def broadcast_center(self) -> int:
-        """Executes simultaneous one-stroke dispatch from center across all geodesic spokes."""
-        return _ttb2_core.broadcast_center(self._ptr)
+        return _ttb2_core.broadcast_center(self._handle)
 
-    def jump_sibling(self, src_spoke: int, dst_spoke: int) -> Tuple[int, int]:
-        """Jumps between siblings: 1 hop if adjacent, 2 hops via dynamic center if distant."""
-        return _ttb2_core.jump_sibling(self._ptr, src_spoke, dst_spoke)
+    def jump_sibling(self, src_spoke: int, dst_spoke: int):
+        return _ttb2_core.jump_sibling(self._handle, src_spoke, dst_spoke)
 
-    def ascent_to_center(self, node_idx: int) -> Tuple[int, int]:
-        """O(1) periphery-to-center flight returning (spoke_id, hub_entry_offset)."""
-        return _ttb2_core.ascent_to_center(self._ptr, node_idx)
+    def ascent_to_center(self, node_idx: int):
+        return _ttb2_core.ascent_to_center(self._handle, node_idx)
 
-    def close(self) -> None:
-        if getattr(self, "_ptr", None):
-            _ttb2_core.free_ttb2(self._ptr)
-            self._ptr = None
+    def update_leaf(self, node_idx: int, new_val: int, skip_sentinel=None) -> bool:
+        s = self._skip if skip_sentinel is None else skip_sentinel
+        return _ttb2_core.update_leaf(self._handle, node_idx, new_val, s)
 
-    def __enter__(self) -> "TTB2Engine":
+    def set_spoke_status(self, spoke_idx: int, active: bool) -> bool:
+        return _ttb2_core.set_spoke_status(self._handle, spoke_idx, 1 if active else 0)
+
+    def close(self):
+        if getattr(self, "_handle", None):
+            _ttb2_core.free_ttb2(self._handle)
+            self._handle = None
+
+    def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
