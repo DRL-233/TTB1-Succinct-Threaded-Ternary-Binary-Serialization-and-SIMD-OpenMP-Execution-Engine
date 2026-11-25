@@ -1,144 +1,151 @@
-#define _POSIX_C_SOURCE 200809L
-#include <Python.h>
-#include "ttb2.h"
+"""
+TTB v0.3.0 (TTB3-Bridge): Cycloidal Hub-Entangled Succinct Ternary Execution Engine
+& Lean-4-Verified OZIP Z3-Triality Contraction Runtime.
+"""
+import struct
+import _ttb2_core
 
-static PyObject* py_compile_ttb2(PyObject *self, PyObject *args) {
-    Py_buffer view;
-    PyObject *val_list = Py_None;
-    long long skip_sentinel = 999999999LL;
-    if (!PyArg_ParseTuple(args, "y*|OL", &view, &val_list, &skip_sentinel)) return NULL;
+__version__ = "0.3.0"
 
-    TTB2Handle *h = NULL;
-    if (val_list != Py_None && PyList_Check(val_list)) {
-        Py_ssize_t n = PyList_Size(val_list);
-        int64_t *ext = (int64_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int64_t));
-        for (Py_ssize_t i = 0; i < n; i++) {
-            PyObject *item = PyList_GetItem(val_list, i);
-            ext[i] = item ? PyLong_AsLongLong(item) : 0;
-        }
-        h = ttb2_compile_with_values((const uint8_t *)view.buf, (size_t)view.len, ext, (int64_t)skip_sentinel);
-        free(ext);
-    } else {
-        h = ttb2_compile((const uint8_t *)view.buf, (size_t)view.len, (int64_t)skip_sentinel);
-    }
-    PyBuffer_Release(&view);
 
-    if (!h) {
-        PyErr_SetString(PyExc_ValueError, "Invalid or truncated TTB2/TTB3 wire packet");
-        return NULL;
-    }
-    return PyLong_FromVoidPtr((void *)h);
-}
+def from_json(workload, embed_values=True, embed_width="auto"):
+    """
+    Encodes a hierarchical Python dict/list tree into a TTB2/TTB3 wire packet.
+    - embed_width="auto" (v0.3.0 default): packs leaf scalars at minimal int8/16/32/64 width
+      with container elision (flags=0x04), inflated on load via AVX2 SIMD sign-extension.
+    - embed_width=64: legacy v0.2.0 raw 64-bit layout (flags=0x02).
+    """
+    degs, dirs, leaves, all_vals, spokes = [], [], [], [], []
 
-static PyObject* py_sum_leaves(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    if (!PyArg_ParseTuple(args, "K", &ptr_val)) return NULL;
-    return PyLong_FromLongLong(ttb2_sum_leaves((const TTB2Handle *)(uintptr_t)ptr_val));
-}
+    def walk(obj):
+        if isinstance(obj, dict):
+            items = list(obj.values())
+            if not items:
+                degs.append(0)
+                dirs.append(0)
+                leaves.append(0)
+                all_vals.append(0)
+                return
+            for k_i, v in enumerate(items):
+                if k_i < len(items) - 1:
+                    degs.append(2)
+                    dirs.append(0)
+                    all_vals.append(0)
+                    walk(v)
+                else:
+                    walk(v)
+        elif isinstance(obj, list):
+            for e_i, elem in enumerate(obj):
+                if e_i < len(obj) - 1:
+                    degs.append(2)
+                    dirs.append(0)
+                    all_vals.append(0)
+                s_start = len(degs)
+                walk(elem)
+                spokes.append((s_start, len(degs) - s_start))
+        else:
+            val = int(obj)
+            degs.append(0)
+            dirs.append(0)
+            leaves.append(val)
+            all_vals.append(val)
 
-static PyObject* py_query_skip(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    long long skip_sentinel = 999999999LL;
-    if (!PyArg_ParseTuple(args, "K|L", &ptr_val, &skip_sentinel)) return NULL;
-    return PyLong_FromLongLong(ttb2_query_skip((const TTB2Handle *)(uintptr_t)ptr_val));
-}
+    walk(workload)
+    n_nodes = len(degs)
+    n_spokes = len(spokes)
 
-static PyObject* py_broadcast_center(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    if (!PyArg_ParseTuple(args, "K", &ptr_val)) return NULL;
-    return PyLong_FromLongLong(ttb2_broadcast_center((const TTB2Handle *)(uintptr_t)ptr_val));
-}
+    deg_bytes = bytearray((n_nodes + 4) // 5)
+    for i in range(0, n_nodes, 5):
+        acc = 0
+        for k in range(5):
+            if i + k < n_nodes:
+                acc += degs[i + k] * (3 ** k)
+        deg_bytes[i // 5] = acc
 
-static PyObject* py_jump_sibling(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    uint32_t src_spoke, dst_spoke;
-    if (!PyArg_ParseTuple(args, "KII", &ptr_val, &src_spoke, &dst_spoke)) return NULL;
-    TTB2JumpResult r = ttb2_jump_sibling((const TTB2Handle *)(uintptr_t)ptr_val, src_spoke, dst_spoke);
-    if (r.hops == 0) {
-        PyErr_SetString(PyExc_IndexError, "Destination spoke out of range");
-        return NULL;
-    }
-    return Py_BuildValue("(LI)", (long long)r.value, r.hops);
-}
+    dir_bytes = bytearray((n_nodes + 7) // 8)
+    for i, d in enumerate(dirs):
+        if d:
+            dir_bytes[i >> 3] |= 1 << (i & 7)
 
-static PyObject* py_ascent_to_center(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    uint32_t node_idx;
-    if (!PyArg_ParseTuple(args, "KI", &ptr_val, &node_idx)) return NULL;
-    TTB2AscentResult r = ttb2_ascent_to_center((const TTB2Handle *)(uintptr_t)ptr_val, node_idx);
-    if (r.spoke_id < 0 && r.hub_offset == 0 && node_idx > 0) {
-        PyErr_SetString(PyExc_IndexError, "Node index out of range");
-        return NULL;
-    }
-    return Py_BuildValue("(iI)", r.spoke_id, r.hub_offset);
-}
+    spoke_bytes = b"".join(struct.pack("<II", off, cnt) for off, cnt in spokes)
 
-static PyObject* py_update_leaf(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    uint32_t node_idx;
-    long long new_val, skip_sentinel = 999999999LL;
-    if (!PyArg_ParseTuple(args, "KIL|L", &ptr_val, &node_idx, &new_val, &skip_sentinel)) return NULL;
-    int ok = ttb2_update_leaf((TTB2Handle *)(uintptr_t)ptr_val, node_idx, (int64_t)new_val, (int64_t)skip_sentinel);
-    return PyBool_FromLong(ok);
-}
+    if not embed_values:
+        header = b"TTB2" + bytes([0x00, 0, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+        return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes), all_vals
 
-static PyObject* py_set_spoke_status(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    uint32_t spoke_idx;
-    int active;
-    if (!PyArg_ParseTuple(args, "KIi", &ptr_val, &spoke_idx, &active)) return NULL;
-    int ok = ttb2_set_spoke_status((TTB2Handle *)(uintptr_t)ptr_val, spoke_idx, active);
-    return PyBool_FromLong(ok);
-}
+    if embed_width == 64:
+        header = b"TTB2" + bytes([0x02, 8, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+        val_bytes = b"".join(struct.pack("<q", v) for v in all_vals)
+        return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes) + val_bytes, all_vals
 
-static PyObject* py_ozip_psi1(PyObject *self, PyObject *args) {
-    uint32_t s, g, i;
-    if (!PyArg_ParseTuple(args, "III", &s, &g, &i)) return NULL;
-    return PyLong_FromUnsignedLong(ttb2_ozip_psi1(s, g, i));
-}
+    max_abs = max((abs(v) for v in leaves), default=0)
+    if max_abs <= 127:
+        w_code, fmt = 1, "<b"
+    elif max_abs <= 32767:
+        w_code, fmt = 2, "<h"
+    elif max_abs <= 2147483647:
+        w_code, fmt = 4, "<i"
+    else:
+        w_code, fmt = 8, "<q"
 
-static PyObject* py_ozip_contract_3x3x2(PyObject *self, PyObject *args) {
-    Py_buffer a_view, b_view;
-    if (!PyArg_ParseTuple(args, "y*y*", &a_view, &b_view)) return NULL;
-    if (a_view.len < 9 * 8 || b_view.len < 6 * 8) {
-        PyBuffer_Release(&a_view);
-        PyBuffer_Release(&b_view);
-        PyErr_SetString(PyExc_ValueError, "Expected 9 int64s for A and 6 int64s for B");
-        return NULL;
-    }
-    int64_t c_out[6];
-    ttb2_ozip_contract_3x3x2((const int64_t *)a_view.buf, (const int64_t *)b_view.buf, c_out);
-    PyBuffer_Release(&a_view);
-    PyBuffer_Release(&b_view);
-    return PyBytes_FromStringAndSize((const char *)c_out, sizeof(c_out));
-}
+    header = b"TTB2" + bytes([0x04, w_code, 0, 0]) + struct.pack("<III", n_nodes, n_spokes, 0)
+    val_bytes = b"".join(struct.pack(fmt, v) for v in leaves)
+    return header + spoke_bytes + bytes(deg_bytes) + bytes(dir_bytes) + val_bytes, all_vals
 
-static PyObject* py_free_ttb2(PyObject *self, PyObject *args) {
-    unsigned long long ptr_val;
-    if (!PyArg_ParseTuple(args, "K", &ptr_val)) return NULL;
-    ttb2_free((TTB2Handle *)(uintptr_t)ptr_val);
-    Py_RETURN_NONE;
-}
 
-static PyMethodDef Methods[] = {
-    {"compile_ttb2",            py_compile_ttb2,            METH_VARARGS, "Compile TTB2/TTB3 cycloidal hub"},
-    {"sum_leaves",              py_sum_leaves,              METH_VARARGS, "SIMD/OpenMP full leaf sum"},
-    {"query_skip",              py_query_skip,              METH_VARARGS, "Branchless AVX2 active query"},
-    {"broadcast_center",        py_broadcast_center,        METH_VARARGS, "One-stroke AVX2 center broadcast"},
-    {"jump_sibling",            py_jump_sibling,            METH_VARARGS, "O(1) dynamic hub sibling jump"},
-    {"ascent_to_center",        py_ascent_to_center,        METH_VARARGS, "O(1) periphery-to-center ascent"},
-    {"update_leaf",             py_update_leaf,             METH_VARARGS, "O(1) live leaf update"},
-    {"set_spoke_status",        py_set_spoke_status,        METH_VARARGS, "O(1) live spoke active mask toggle"},
-    {"ozip_psi1",               py_ozip_psi1,               METH_VARARGS, "OZIP mixed-radix bijection 9s+3g+i"},
-    {"ozip_contract_3x3x2",     py_ozip_contract_3x3x2,     METH_VARARGS, "OZIP Z3-triality <3,3,2> contraction"},
-    {"free_ttb2",               py_free_ttb2,               METH_VARARGS, "Free engine handle"},
-    {NULL, NULL, 0, NULL}
-};
+def ozip_psi1(s: int, g: int, i: int) -> int:
+    """OZIP v2.0.0 mixed-radix coordinate bijection: psi1(s, g, i) = 9s + 3g + i in Fin 18."""
+    return _ttb2_core.ozip_psi1(s, g, i)
 
-static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT, "_ttb2_core", NULL, -1, Methods
-};
 
-PyMODINIT_FUNC PyInit__ttb2_core(void) {
-    return PyModule_Create(&moduledef);
-}
+def ozip_contract_3x3x2(A_flat, B_flat):
+    """Contracts <3, 3, 2> Z3-triality sectors in a single native C/AVX2 pass."""
+    a_bytes = struct.pack("<9q", *[int(x) for x in A_flat])
+    b_bytes = struct.pack("<6q", *[int(x) for x in B_flat])
+    c_bytes = _ttb2_core.ozip_contract_3x3x2(a_bytes, b_bytes)
+    return list(struct.unpack("<6q", c_bytes))
+
+
+class TTB2Engine:
+    """Context-managed handle to the compiled C/AVX2/OpenMP cycloidal manifold."""
+
+    def __init__(self, packet: bytes, values=None, skip_sentinel: int = 999999999):
+        self._skip = skip_sentinel
+        if values is not None:
+            self._handle = _ttb2_core.compile_ttb2(packet, values, skip_sentinel)
+        else:
+            self._handle = _ttb2_core.compile_ttb2(packet, None, skip_sentinel)
+
+    def sum_leaves(self) -> int:
+        return _ttb2_core.sum_leaves(self._handle)
+
+    def query_skip(self, skip_sentinel=None) -> int:
+        s = self._skip if skip_sentinel is None else skip_sentinel
+        return _ttb2_core.query_skip(self._handle, s)
+
+    def broadcast_center(self) -> int:
+        return _ttb2_core.broadcast_center(self._handle)
+
+    def jump_sibling(self, src_spoke: int, dst_spoke: int):
+        return _ttb2_core.jump_sibling(self._handle, src_spoke, dst_spoke)
+
+    def ascent_to_center(self, node_idx: int):
+        return _ttb2_core.ascent_to_center(self._handle, node_idx)
+
+    def update_leaf(self, node_idx: int, new_val: int, skip_sentinel=None) -> bool:
+        s = self._skip if skip_sentinel is None else skip_sentinel
+        return _ttb2_core.update_leaf(self._handle, node_idx, new_val, s)
+
+    def set_spoke_status(self, spoke_idx: int, active: bool) -> bool:
+        return _ttb2_core.set_spoke_status(self._handle, spoke_idx, 1 if active else 0)
+
+    def close(self):
+        if getattr(self, "_handle", None):
+            _ttb2_core.free_ttb2(self._handle)
+            self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
