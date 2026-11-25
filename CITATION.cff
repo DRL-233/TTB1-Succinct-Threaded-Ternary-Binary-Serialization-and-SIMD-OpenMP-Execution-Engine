@@ -1,29 +1,21 @@
 cff-version: 1.2.0
-message: "If you use TTB1 (v0.2.0 / TTB2) in your research or software, please cite it using this metadata."
-title: "TTB1: Cycloidal Hub-Entangled Succinct Ternary Serialization and SIMD/OpenMP Execution Engine"
-version: 0.2.0
+message: "If you use TTB in your research or production systems, please cite it alongside the companion OZIP-Algebra Lean 4 formalization."
+title: "TTB v0.3.0 (TTB3-Bridge): Cycloidal Hub-Entangled Succinct Ternary Execution Engine & OZIP Z3-Triality Contraction Runtime"
+version: 0.3.0
+date-released: 2026-11-25
 doi: 10.5281/zenodo.24379185
-date-released: 2026-11-20
 license: MIT
-repository-code: "https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine"
-abstract: >
-  TTB1 (v0.2.0 / TTB2 wire protocol) is a succinct binary wire format (~2.60-2.84 bits/node)
-  and load-time basic-block fusion runtime for cycloidal hub-entangled ternary trees.
-  By combining 5-trit degree packing, predicate-sparse threaded cross-links,
-  hemispherical geodesic spoke addressing (2*pi*R^2) for O(1) center-to-periphery
-  flight and dynamic sibling jumps, and 64-byte aligned zero-copy payloads, TTB1
-  achieves up to 30.8x wire compression and >1,325x faster tree execution than
-  standard JSON pipelines without floating-point or matrix operations.
-keywords:
-  - succinct data structures
-  - ternary tree
-  - cycloidal hub-and-spoke addressing
-  - bytecode compiler
-  - basic block fusion
-  - SIMD
-  - OpenMP
-  - zero-copy serialization
-  - edge computing
 authors:
-  - family-names: "Asare-Darko"
-    given-names: "Matthias"
+  - family-names: Asare-Darko
+    given-names: Matthias
+    affiliation: "Darkon Research Laboratory (DRL), Ghana"
+repository-code: "https://github.com/DRL-233/TTB1-Succinct-Threaded-Ternary-Binary-Serialization-and-SIMD-OpenMP-Execution-Engine"
+references:
+  - type: software
+    title: "OZIP Algebra & Conditional Matrix Multiplication Exponent ω = 2.0 — Lean 4 Kernel Verification"
+    version: 2.0.0
+    doi: 10.5281/zenodo.24528210
+    authors:
+      - family-names: Asare-Darko
+        given-names: Matthias
+        affiliation: "Darkon Research Laboratory (DRL), Ghana"
