@@ -1,0 +1,37 @@
+{
+  "title": "TTB v0.3.0 (TTB3-Bridge): Cycloidal Hub-Entangled Succinct Ternary Execution Engine & OZIP Z3-Triality Contraction Runtime",
+  "upload_type": "software",
+  "description": "High-performance C/AVX2/OpenMP execution runtime unifying succinct 5-trit cycloidal hub topologies, adaptive SIMD-inflated wire packing, O(1) live mutations, and Lean-4-verified OZIP-Algebra v2.0.0 Z3-triality tensor contraction kernels (DOI: 10.5281/zenodo.24528210).",
+  "creators": [
+    {
+      "name": "Asare-Darko, Matthias",
+      "affiliation": "Darkon Research Laboratory (DRL), Ghana"
+    }
+  ],
+  "keywords": [
+    "succinct data structures",
+    "ternary serialization",
+    "OZIP algebra",
+    "Z3 triality",
+    "matrix multiplication exponent",
+    "SIMD",
+    "AVX2",
+    "PHP FFI",
+    "qutrit"
+  ],
+  "license": "MIT",
+  "related_identifiers": [
+    {
+      "scheme": "doi",
+      "identifier": "10.5281/zenodo.24379185",
+      "relation": "isVersionOf",
+      "resource_type": "software"
+    },
+    {
+      "scheme": "doi",
+      "identifier": "10.5281/zenodo.24528210",
+      "relation": "isSupplementedBy",
+      "resource_type": "software"
+    }
+  ]
+}
